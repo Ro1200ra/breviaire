@@ -187,36 +187,96 @@ function melodize(lineText, role, tone, withIntonation) {
   return res;
 }
 
-// ---------------------------------------------------------------- synthétiseur
+// ---------------------------------------------------------------- synthétiseur (orgue ou voix de chœur qui chante les voyelles)
 let ctx = null, master = null, droneNodes = null, scheduled = [], timers = [], playing = false, onEvent = () => {};
+let events = [], eventIdx = 0, schedulerTimer = null, speechQueue = [];
 function audio() {
-  if (!ctx) { ctx = new (window.AudioContext || window.webkitAudioContext)(); master = ctx.createGain(); master.gain.value = 0.5; master.connect(ctx.destination); }
+  if (!ctx) {
+    ctx = new (window.AudioContext || window.webkitAudioContext)();
+    master = ctx.createGain(); master.gain.value = 0.6;
+    const comp = ctx.createDynamicsCompressor(); comp.threshold.value = -18; comp.ratio.value = 4;
+    master.connect(comp).connect(ctx.destination);
+  }
   if (ctx.state === 'suspended') ctx.resume();
   return ctx;
 }
 const freq = semi => 261.63 * Math.pow(2, semi / 12);
 
-function voice(semi, t0, dur, vol = 0.8) {
+// Formants (Hz) des voyelles françaises, voix d'homme — F1, F2, F3 et amplitude relative
+const FORMANTS = {
+  a: [[700, 1], [1220, 0.5], [2600, 0.22]], e: [[500, 1], [1500, 0.45], [2450, 0.2]], E: [[550, 1], [1800, 0.45], [2500, 0.2]],
+  i: [[280, 1], [2250, 0.35], [2900, 0.2]], o: [[520, 1], [850, 0.6], [2500, 0.15]], O: [[450, 1], [780, 0.6], [2600, 0.12]],
+  u: [[320, 1], [720, 0.55], [2500, 0.12]], y: [[290, 1], [1800, 0.35], [2200, 0.2]], x: [[380, 1], [1600, 0.4], [2400, 0.18]],
+  A: [[650, 1], [1100, 0.45], [2500, 0.18]], N: [[450, 1], [800, 0.5], [2400, 0.12]], I: [[500, 1], [1700, 0.4], [2400, 0.18]],
+};
+/** Voyelle (clé FORMANTS) d'une syllabe écrite. */
+function vowelOf(text) {
+  const s = text.toLowerCase().replace(/[^a-zàâäéèêëîïôöùûüœæ]/g, '');
+  const re = /(eau|ain|ein|au|ou|oi|oe|œu|eu|ai|ei|an|am|en|em|on|om|in|im|un|um|yn|ym|[aàâäeéèêëiîïoôöuùûüyœæ])/g;
+  let m, v = null;
+  while ((m = re.exec(s)) !== null) v = m[1]; // la dernière voyelle de la syllabe est celle qui se chante (Dieu -> eu)
+  if (!v) return 'a';
+  if (v === 'ou') return 'u';
+  if (v === 'oi') return 'a';
+  if (v === 'eau' || v === 'au' || v === 'ô') return 'O';
+  if (v === 'eu' || v === 'œu' || v === 'oe') return 'x';
+  if (v === 'on' || v === 'om') return 'N';
+  if (v === 'an' || v === 'am' || v === 'en' || v === 'em') return 'A';
+  if (/^(in|im|ain|ein|un|um|yn|ym)$/.test(v)) return 'I';
+  if (v === 'ai' || v === 'ei' || v === 'è' || v === 'ê' || v === 'ë') return 'E';
+  if (v === 'é') return 'e';
+  if (v === 'e') return /e[bcdfgjklmnpqrstvxz]{2}|e[rz]$/.test(s) ? 'E' : 'e';
+  if (v === 'i' || v === 'î' || v === 'ï' || v === 'y') return 'i';
+  if (v === 'o' || v === 'ö') return 'o';
+  if (v === 'u' || v === 'ù' || v === 'û' || v === 'ü') return 'y';
+  return 'a';
+}
+
+/** Une note : timbre 'organ' ou 'choir' ; vowel = clé FORMANTS pour le chœur. */
+function voice(semi, t0, dur, vol = 0.8, timbre = 'organ', vowel = 'a') {
   const c = audio();
   const g = c.createGain();
+  const att = timbre === 'choir' ? 0.07 : 0.04;
   g.gain.setValueAtTime(0.0001, t0);
-  g.gain.exponentialRampToValueAtTime(vol, t0 + 0.04);
-  g.gain.setValueAtTime(vol, Math.max(t0 + 0.04, t0 + dur - 0.08));
-  g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur + 0.02);
-  const lp = c.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 1800;
-  g.connect(lp).connect(master);
-  const parts = [[1, 'sine', 1], [2, 'triangle', 0.25], [3, 'sine', 0.12], [1.003, 'sine', 0.5]];
-  parts.forEach(([mult, type, amp]) => {
-    const o = c.createOscillator(); o.type = type; o.frequency.value = freq(semi) * mult;
-    const og = c.createGain(); og.gain.value = amp; o.connect(og).connect(g);
-    o.start(t0); o.stop(t0 + dur + 0.05); scheduled.push(o);
-  });
+  g.gain.exponentialRampToValueAtTime(vol, t0 + att);
+  g.gain.setValueAtTime(vol, Math.max(t0 + att, t0 + dur - 0.08));
+  g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur + 0.03);
+  const f = freq(semi);
+  if (timbre === 'choir') {
+    // source riche (dents de scie détunées) -> 3 filtres de formants en parallèle -> enveloppe
+    const src = c.createGain(); src.gain.value = 0.18;
+    [[-6, 'sawtooth', 1], [5, 'sawtooth', 1], [0, 'triangle', 0.6]].forEach(([cents, type, amp]) => {
+      const o = c.createOscillator(); o.type = type; o.frequency.value = f; o.detune.value = cents;
+      const og = c.createGain(); og.gain.value = amp; o.connect(og).connect(src);
+      // vibrato léger qui s'installe après le début de la note
+      const lfo = c.createOscillator(); lfo.frequency.value = 5.2;
+      const lg = c.createGain(); lg.gain.setValueAtTime(0, t0); lg.gain.linearRampToValueAtTime(f * 0.006, t0 + Math.min(0.35, dur));
+      lfo.connect(lg).connect(o.frequency); lfo.start(t0); lfo.stop(t0 + dur + 0.05);
+      o.start(t0); o.stop(t0 + dur + 0.05); scheduled.push(o, lfo);
+    });
+    const fs = FORMANTS[vowel] || FORMANTS.a;
+    fs.forEach(([fr, amp]) => {
+      const bp = c.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = fr; bp.Q.value = 9;
+      const fg = c.createGain(); fg.gain.value = amp * 2.2;
+      src.connect(bp).connect(fg).connect(g);
+    });
+    const lp = c.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 3800;
+    g.connect(lp).connect(master);
+  } else {
+    const lp = c.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 1800;
+    g.connect(lp).connect(master);
+    [[1, 'sine', 1], [2, 'triangle', 0.25], [3, 'sine', 0.12], [1.003, 'sine', 0.5]].forEach(([mult, type, amp]) => {
+      const o = c.createOscillator(); o.type = type; o.frequency.value = f * mult;
+      const og = c.createGain(); og.gain.value = amp; o.connect(og).connect(g);
+      o.start(t0); o.stop(t0 + dur + 0.05); scheduled.push(o);
+    });
+  }
 }
 
 function startDrone(semi) {
   stopDrone();
   const c = audio();
-  const g = c.createGain(); g.gain.setValueAtTime(0.0001, c.currentTime); g.gain.exponentialRampToValueAtTime(0.12, c.currentTime + 0.8);
+  const g = c.createGain(); g.gain.setValueAtTime(0.0001, c.currentTime); g.gain.exponentialRampToValueAtTime(0.1, c.currentTime + 0.8);
   const lp = c.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 600;
   g.connect(lp).connect(master);
   const oscs = [[0.5, 'sine'], [1, 'triangle'], [0.5015, 'sine']].map(([m, type]) => { const o = c.createOscillator(); o.type = type; o.frequency.value = freq(semi) * m; o.connect(g); o.start(); return o; });
@@ -229,60 +289,99 @@ function stopDrone() {
   setTimeout(() => oscs.forEach(o => { try { o.stop(); } catch {} }), 600);
 }
 
+/** Ordonnanceur : crée les notes peu avant leur heure (économie de mémoire sur téléphone). */
+function runScheduler() {
+  if (!playing) return;
+  const now = ctx.currentTime;
+  while (eventIdx < events.length && events[eventIdx].t < now + 1.2) {
+    const e = events[eventIdx++];
+    if (e.t + e.dur < now - 0.05) continue;
+    voice(e.semi, Math.max(e.t, now + 0.01), e.dur, e.vol, e.timbre, e.vowel);
+  }
+  scheduled = scheduled.filter(o => { try { return true; } catch { return false; } });
+  if (scheduled.length > 400) scheduled.splice(0, scheduled.length - 400);
+}
+
 function stop() {
   const was = playing;
   playing = false;
+  if (schedulerTimer) { clearInterval(schedulerTimer); schedulerTimer = null; }
   timers.forEach(clearTimeout); timers = [];
   scheduled.forEach(o => { try { o.stop(); } catch {} }); scheduled = [];
+  events = []; eventIdx = 0;
   stopDrone();
+  if (speechQueue.length) { speechQueue = []; try { speechSynthesis.cancel(); } catch {} }
   if (was) onEvent({ type: 'stop' });
+}
+
+function startEvents() {
+  runScheduler();
+  schedulerTimer = setInterval(runScheduler, 250);
 }
 
 /** Joue la formule du ton (intonation, teneur, médiante, teneur, finale). */
 function playTone(toneId, opts = {}) {
   stop(); playing = true;
   const t = toneById(toneId), tr = opts.transpose || 0, base = 60 / Math.max(60, Math.min(300, opts.tempo || 160));
+  const timbre = opts.timbre || 'organ';
   const seq = [...t.int, t.ten, t.ten, t.ten, ...t.med.pre, t.med.acc, ...t.med.post, null, t.ten2, t.ten2, t.ten2, ...t.term.pre, t.term.acc, ...t.term.post];
   const c = audio();
   let at = c.currentTime + 0.1;
   seq.forEach((n, i) => {
     if (n == null) { at += base; return; }
     const last = i === seq.length - 1 || seq[i + 1] == null;
-    voice(n + tr, at, last ? base * 2 : base); at += last ? base * 2.2 : base;
+    events.push({ t: at, dur: last ? base * 2 : base, semi: n + tr, vol: 0.8, timbre, vowel: 'a' }); at += last ? base * 2.2 : base;
   });
-  timers.push(setTimeout(() => { playing = false; onEvent({ type: 'stop' }); }, (at - c.currentTime + 0.3) * 1000));
+  startEvents();
+  timers.push(setTimeout(() => { playing = false; if (schedulerTimer) clearInterval(schedulerTimer); onEvent({ type: 'stop' }); }, (at - c.currentTime + 0.3) * 1000));
+}
+
+function speakLine(text, opts) {
+  if (!('speechSynthesis' in window)) return;
+  const u = new SpeechSynthesisUtterance(text.replace(/[*+†]/g, ''));
+  if (opts.speakVoice) u.voice = opts.speakVoice;
+  u.lang = (opts.speakVoice && opts.speakVoice.lang) || 'fr-FR';
+  u.rate = Math.max(0.5, Math.min(1.6, (opts.tempo || 160) / 60 / 4.2));
+  u.pitch = opts.speakPitch || 1;
+  speechQueue.push(u);
+  speechSynthesis.speak(u);
 }
 
 /**
  * Chante une liste de versets (de parseVerses) sur un ton.
- * opts: { transpose, tempo (syllabes/min), intonationEachVerse, drone, onSyllable(vi, li, si), onVerse(vi), onEnd() }
+ * opts: { transpose, tempo (syllabes/min), intonationEachVerse, drone, timbre:'organ'|'choir', speak:boolean, speakVoice, speakPitch,
+ *         onSyllable(vi, li, si), onVerse(vi), onEnd() }
  */
 function sing(verses, toneId, opts = {}) {
   stop(); playing = true;
   const t = toneById(toneId), tr = opts.transpose || 0;
   const base = 60 / Math.max(60, Math.min(300, opts.tempo || 160));
+  const timbre = opts.timbre || 'organ';
   const c = audio();
   if (opts.drone) startDrone(t.ten + tr - 12);
-  let at = c.currentTime + 0.25;
+  let at = c.currentTime + 0.3;
   const startAt = at;
-  const plan = verses.map((v, vi) => v.lines.map(l => ({ role: l.role, syls: melodize(l.text, l.role, t, vi === 0 || !!opts.intonationEachVerse) })));
+  const plan = verses.map((v, vi) => v.lines.map(l => ({ role: l.role, text: l.text, syls: melodize(l.text, l.role, t, vi === 0 || !!opts.intonationEachVerse) })));
   plan.forEach((lines, vi) => {
     timers.push(setTimeout(() => opts.onVerse && opts.onVerse(vi), Math.max(0, (at - c.currentTime) * 1000)));
     lines.forEach((line, li) => {
+      if (opts.speak) { const txt = line.text; timers.push(setTimeout(() => playing && speakLine(txt, opts), Math.max(0, (at - c.currentTime) * 1000))); }
       line.syls.forEach((s, si) => {
         const isLast = si === line.syls.length - 1;
         const stretch = s.kind === 'ten' || s.kind === 'int' ? 1 : 1.3;
         const t0 = at;
+        const vowel = timbre === 'choir' ? vowelOf(s.text) : 'a';
         s.notes.forEach((n, k) => {
           const d = base * stretch * (isLast && k === s.notes.length - 1 ? 1.8 : 1) * (s.notes.length > 1 ? 0.8 : 1);
-          voice(n + tr, at, d); at += d;
+          events.push({ t: at, dur: d, semi: n + tr, vol: opts.speak ? 0.55 : 0.8, timbre, vowel }); at += d;
         });
         timers.push(setTimeout(() => opts.onSyllable && opts.onSyllable(vi, li, si), Math.max(0, (t0 - c.currentTime) * 1000)));
       });
       at += line.role === 'term' ? base * 1.6 : base * 0.9; // respiration
     });
   });
-  timers.push(setTimeout(() => { playing = false; stopDrone(); opts.onEnd && opts.onEnd(); onEvent({ type: 'stop' }); }, (at - c.currentTime + 0.2) * 1000));
+  startEvents();
+  timers.push(setTimeout(() => { playing = false; if (schedulerTimer) clearInterval(schedulerTimer); stopDrone(); opts.onEnd && opts.onEnd(); onEvent({ type: 'stop' }); }, (at - c.currentTime + 0.2) * 1000));
   return { plan, duration: at - startAt };
 }
 
@@ -290,5 +389,5 @@ function isPlaying() { return playing; }
 function setListener(fn) { onEvent = fn || (() => {}); }
 function pointLine(lineText, role, tone, withIntonation) { return melodize(lineText, role, tone, withIntonation); }
 
-return { TONES, toneById, formula, noteName, parseVerses, pointLine, playTone, sing, stop, isPlaying, setListener };
+return { TONES, toneById, formula, noteName, parseVerses, pointLine, playTone, sing, stop, isPlaying, setListener, vowelOf };
 })();
