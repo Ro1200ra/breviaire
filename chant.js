@@ -100,7 +100,8 @@ function htmlToLines(html) {
   h = h.replace(/<u>\s*([^<]*?)\s*<\/u>/gi, (m, v) => ACC + v);
   h = h.replace(/<br\s*\/?>/gi, '\n').replace(/<\/p>/gi, '\n\n').replace(/<[^>]+>/g, '');
   h = h.replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&#39;/g, "'").replace(/&quot;/g, '"');
-  return h.split('\n').map(l => l.replace(/[ \t ]+/g, ' ').trim());
+  h = h.replace(/\[[^\]]*]/g, ''); // annotations de versets : [10-12]
+  return h.split('\n').map(l => { const t = l.replace(/[ \t ]+/g, ' ').trim(); return /\p{L}/u.test(t) ? t : ''; });
 }
 
 /**

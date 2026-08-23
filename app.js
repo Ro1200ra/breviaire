@@ -717,8 +717,8 @@ function openChantSheet(section) {
   if (Speech.playing) Speech.pause();
   const verses = Chant.parseVerses(section.html);
   if (!verses.length) { toast('Texte non psalmodiable'); return; }
-  const cp = { tone: prefs.chantTone || '8', transpose: prefs.chantTranspose ?? -4, tempo: prefs.chantTempo || 160, drone: prefs.chantDrone ?? true, intonationEach: prefs.chantIntonationEach ?? false, notes: prefs.chantNotes ?? true, timbre: prefs.chantTimbre || 'choir', speak: prefs.chantSpeak ?? false };
-  const save = () => { prefs.chantTone = cp.tone; prefs.chantTranspose = cp.transpose; prefs.chantTempo = cp.tempo; prefs.chantDrone = cp.drone; prefs.chantIntonationEach = cp.intonationEach; prefs.chantNotes = cp.notes; prefs.chantTimbre = cp.timbre; prefs.chantSpeak = cp.speak; };
+  const cp = { tone: prefs.chantTone || '8', transpose: prefs.chantTranspose ?? -4, tempo: prefs.chantTempo || 160, intonationEach: prefs.chantIntonationEach ?? false, notes: prefs.chantNotes ?? true, acc: prefs.chantAcc ?? 1, speak: prefs.chantSpeak ?? false };
+  const save = () => { prefs.chantTone = cp.tone; prefs.chantTranspose = cp.transpose; prefs.chantTempo = cp.tempo; prefs.chantIntonationEach = cp.intonationEach; prefs.chantNotes = cp.notes; prefs.chantAcc = cp.acc; prefs.chantSpeak = cp.speak; };
   const bg = document.createElement('div'); bg.className = 'sheet-bg';
   const trText = v => v === 0 ? 'hauteur d\'origine' : (v > 0 ? '+' : '') + v + ' demi-ton' + (Math.abs(v) > 1 ? 's' : '');
   bg.innerHTML = `<div class="sheet chant">
@@ -728,9 +728,10 @@ function openChantSheet(section) {
     <select id="tone">${Chant.TONES.map(t => `<option value="${t.id}" ${t.id === cp.tone ? 'selected' : ''}>${t.name} — ${t.mode}</option>`).join('')}</select>
     <div class="formula" id="formula"></div>
     <label class="l">Qui chante ?</label>
-    <select id="timbre">
-      <option value="choir" ${cp.timbre === 'choir' ? 'selected' : ''}>Voix chantée (chœur qui chante les syllabes)</option>
-      <option value="organ" ${cp.timbre === 'organ' ? 'selected' : ''}>Orgue seul</option>
+    <select id="acc">
+      <option value="0" ${cp.acc === 0 ? 'selected' : ''}>Voix chantée seule (a cappella)</option>
+      <option value="1" ${cp.acc === 1 ? 'selected' : ''}>Voix chantée + orgue (bourdon)</option>
+      <option value="2" ${cp.acc === 2 ? 'selected' : ''}>Orgue seul</option>
     </select>
     <div class="sw"><span>Dire aussi les paroles (voix du téléphone par-dessus la mélodie)</span><input type="checkbox" id="speakWords" ${cp.speak ? 'checked' : ''}></div>
     <div class="ctrl">
@@ -742,7 +743,6 @@ function openChantSheet(section) {
     <input type="range" id="tr" min="-12" max="8" step="1" value="${cp.transpose}">
     <label class="l" id="lblTempo">Allure : ${cp.tempo} syllabes / min</label>
     <input type="range" id="tempo" min="90" max="260" step="10" value="${cp.tempo}">
-    <div class="sw"><span>Bourdon d'orgue (note de teneur tenue)</span><input type="checkbox" id="drone" ${cp.drone ? 'checked' : ''}></div>
     <div class="sw"><span>Intonation à chaque verset (sinon au premier seulement)</span><input type="checkbox" id="intEach" ${cp.intonationEach ? 'checked' : ''}></div>
     <div class="sw"><span>Afficher le nom des notes sous les syllabes</span><input type="checkbox" id="showNotes" ${cp.notes ? 'checked' : ''}></div>
     <div id="verses" style="margin-top:10px"></div>
@@ -769,20 +769,19 @@ function openChantSheet(section) {
     bg.querySelectorAll('.verse').forEach(el => el.onclick = () => singFrom(+el.dataset.v));
   }
   let lastSyl = null;
-  const opts = () => ({ transpose: cp.transpose, tempo: cp.tempo, drone: cp.drone, intonationEachVerse: cp.intonationEach,
-    timbre: cp.timbre, speak: cp.speak, speakVoice: Speech.pickVoice(),
+  const opts = () => ({ transpose: cp.transpose, tempo: cp.tempo, drone: cp.acc === 1, intonationEachVerse: cp.intonationEach,
+    timbre: cp.acc === 2 ? 'organ' : 'choir', speak: cp.speak, speakVoice: Speech.pickVoice(),
     onVerse: vi => { bg.querySelectorAll('.verse').forEach(el => el.classList.toggle('cur', +el.dataset.v === vi)); const el = bg.querySelector(`.verse[data-v="${vi}"]`); if (el) el.scrollIntoView({ block: 'center', behavior: 'smooth' }); },
     onSyllable: (vi, li, si) => { if (lastSyl) lastSyl.classList.remove('now'); lastSyl = bg.querySelector(`.syl[data-v="${vi}"][data-l="${li}"][data-s="${si}"]`); if (lastSyl) lastSyl.classList.add('now'); },
     onEnd: () => { if (lastSyl) lastSyl.classList.remove('now'); bg.querySelectorAll('.verse').forEach(el => el.classList.remove('cur')); },
   });
   q('#tone').onchange = e => { cp.tone = e.target.value; save(); renderVerses(); if (Chant.isPlaying()) Chant.sing(verses, cp.tone, opts()); };
-  q('#timbre').onchange = e => { cp.timbre = e.target.value; save(); };
+  q('#acc').onchange = e => { cp.acc = +e.target.value; save(); if (Chant.isPlaying()) singFrom(Math.max(0, +(bg.querySelector('.verse.cur')?.dataset.v ?? 0))); };
   q('#speakWords').onchange = e => { cp.speak = e.target.checked; save(); };
   q('#tr').oninput = e => { cp.transpose = +e.target.value; q('#lblTr').textContent = 'Hauteur : ' + trText(cp.transpose); };
   q('#tr').onchange = () => save();
   q('#tempo').oninput = e => { cp.tempo = +e.target.value; q('#lblTempo').textContent = `Allure : ${cp.tempo} syllabes / min`; };
   q('#tempo').onchange = () => save();
-  q('#drone').onchange = e => { cp.drone = e.target.checked; save(); };
   q('#intEach').onchange = e => { cp.intonationEach = e.target.checked; save(); renderVerses(); };
   q('#showNotes').onchange = e => { cp.notes = e.target.checked; save(); renderVerses(); };
   q('#playTone').onclick = () => Chant.playTone(cp.tone, opts());
