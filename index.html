@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#5E1F2E">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Bréviaire">
+<meta name="description" content="Liturgie des Heures (AELF) lue à voix haute : Laudes, Vêpres, Complies… voix et vitesse réglables.">
+<title>Bréviaire — Liturgie des Heures à voix haute</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<style>
+:root{
+  --bg:#FAF7F2;--surface:#FFFFFF;--text:#1F1B16;--muted:#6B625A;--primary:#7B2D3B;--primary-dark:#5E1F2E;
+  --on-primary:#FFFFFF;--container:#F3E6C4;--on-container:#5E1F2E;--gold:#C9A24D;--highlight:#FFF3D6;--border:#E6DED2;--shadow:0 1px 3px rgba(0,0,0,.12);
+}
+[data-theme="dark"]{
+  --bg:#151210;--surface:#1F1A17;--text:#F1EAE0;--muted:#B2A69A;--primary:#E2B85B;--primary-dark:#C9A24D;
+  --on-primary:#1F1A17;--container:#3A2026;--on-container:#F3E6C4;--highlight:#3F3420;--border:#3A322C;--shadow:0 1px 3px rgba(0,0,0,.5);
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;font-size:16px;-webkit-text-size-adjust:100%}
+body{min-height:100vh;padding-bottom:env(safe-area-inset-bottom)}
+header.bar{position:sticky;top:0;z-index:10;background:var(--primary-dark);color:#fff;display:flex;align-items:center;gap:8px;padding:10px 12px;padding-top:calc(10px + env(safe-area-inset-top));box-shadow:var(--shadow)}
+header.bar h1{font-size:19px;margin:0;flex:1;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+header.bar .sub{font-size:12px;opacity:.85;font-weight:400;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.icon-btn{background:none;border:none;color:inherit;width:44px;height:44px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;font-size:22px;flex:none}
+.icon-btn:active{background:rgba(255,255,255,.15)}
+.icon-btn svg{width:26px;height:26px;fill:currentColor}
+main{padding:14px 14px 170px;max-width:760px;margin:0 auto}
+.daterow{display:flex;align-items:center;gap:4px;margin-bottom:4px}
+.daterow .date{flex:1;text-align:center;font-weight:700;font-size:19px;padding:8px;border-radius:10px;cursor:pointer}
+.daterow .date input{position:absolute;opacity:0;width:1px;height:1px}
+.chips{display:flex;justify-content:center;gap:8px;margin-bottom:10px;flex-wrap:wrap}
+.chip{border:1px solid var(--border);background:var(--surface);color:var(--primary);border-radius:20px;padding:6px 14px;font-size:14px;cursor:pointer;font-weight:600}
+.chip.on{background:var(--container);color:var(--on-container);border-color:transparent}
+.card{background:var(--surface);border-radius:14px;box-shadow:var(--shadow);padding:14px 16px;margin-bottom:10px}
+.info{background:var(--container);color:var(--on-container);display:flex;gap:14px;align-items:center}
+.dot{width:18px;height:18px;border-radius:50%;border:1px solid rgba(0,0,0,.35);flex:none}
+.info b{display:block;font-size:17px}
+.info span{font-size:14px;display:block;margin-top:3px;white-space:pre-line}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;background:var(--primary);color:var(--on-primary);border:none;border-radius:24px;padding:13px 20px;font-size:16px;font-weight:600;cursor:pointer;width:100%;margin:6px 0 14px}
+.btn.secondary{background:var(--container);color:var(--on-container)}
+.btn.small{width:auto;padding:8px 14px;font-size:14px;margin:0}
+.btn svg{width:22px;height:22px;fill:currentColor}
+h2.section{color:var(--primary);font-size:14px;text-transform:uppercase;letter-spacing:.04em;margin:14px 0 8px}
+.office{display:flex;align-items:center;gap:10px;cursor:pointer}
+.office .t{flex:1;min-width:0}
+.office b{font-size:17px;display:block}
+.office small{color:var(--muted);display:block}
+.office .off{color:#2E7D32;font-size:11px}
+.office .icon-btn{color:var(--primary)}
+.src{font-size:12px;color:var(--muted);text-align:center;margin:16px 0}
+/* lecture */
+.sec{cursor:pointer;border:2px solid transparent}
+.sec.cur{border-color:var(--primary);background:var(--highlight)}
+.sec h3{margin:0;color:var(--primary);font-size:16px;display:flex;align-items:center;gap:8px}
+.sec h3 .spk{display:none;margin-left:auto}
+.sec.cur h3 .spk{display:inline}
+.sec .st{font-style:italic;font-size:13px;color:var(--muted);margin-top:2px}
+.sec .body{margin-top:8px;line-height:1.5;font-size:var(--fs,17px)}
+.sec .body p{margin:0 0 .8em}
+.sec .body sup{color:#9E9E9E;font-size:.65em}
+.sec .body u{text-decoration:none;border-bottom:1px solid currentColor}
+.player{position:fixed;left:0;right:0;bottom:0;background:var(--surface);box-shadow:0 -2px 12px rgba(0,0,0,.18);padding:6px 10px calc(8px + env(safe-area-inset-bottom));z-index:20}
+.player .row{display:flex;align-items:center;gap:4px;justify-content:center}
+.player .prog{flex:1;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding-left:8px}
+.player .fab{width:60px;height:60px;border-radius:50%;background:var(--primary);color:var(--on-primary);border:none;display:inline-flex;align-items:center;justify-content:center;margin:0 8px;cursor:pointer;box-shadow:var(--shadow)}
+.player .fab svg{width:32px;height:32px;fill:currentColor}
+.player .icon-btn{color:var(--text)}
+.player .font{font-weight:700;color:var(--primary);background:none;border:none;font-size:15px;padding:8px 10px;cursor:pointer}
+.player .font.big{font-size:19px}
+/* feuille */
+.sheet-bg{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:30;display:flex;align-items:flex-end;justify-content:center}
+.sheet{background:var(--surface);border-radius:18px 18px 0 0;width:100%;max-width:760px;max-height:88vh;overflow:auto;padding:18px 20px calc(18px + env(safe-area-inset-bottom))}
+.sheet h2{margin:0 0 10px;font-size:20px}
+.sheet label.l{display:block;color:var(--primary);font-weight:700;margin:14px 0 4px;font-size:14px}
+.sheet select,.sheet input[type=range]{width:100%}
+.sheet select{padding:10px;border-radius:10px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:15px}
+.sheet .help{font-size:12px;color:var(--muted)}
+.sw{display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border);gap:10px;font-size:15px}
+.sw input{width:22px;height:22px;flex:none}
+.settings .card{padding:4px 16px}
+.settings .row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 0;border-bottom:1px solid var(--border);font-size:15px}
+.settings .row:last-child{border-bottom:none}
+.settings select{padding:8px;border-radius:8px;border:1px solid var(--border);background:var(--surface);color:var(--text);max-width:55%}
+.center{text-align:center;padding:30px 16px;color:var(--muted)}
+.err{color:#C62828}
+.spin{display:inline-block;width:28px;height:28px;border:3px solid var(--border);border-top-color:var(--primary);border-radius:50%;animation:sp 1s linear infinite}
+@keyframes sp{to{transform:rotate(360deg)}}
+.mini{position:fixed;left:12px;right:12px;bottom:12px;background:var(--surface);border-radius:16px;box-shadow:0 4px 14px rgba(0,0,0,.25);display:flex;align-items:center;gap:6px;padding:6px 6px 6px 16px;z-index:20;cursor:pointer}
+.mini[hidden],[hidden]{display:none !important}
+.mini .t{flex:1;min-width:0}
+.mini b{display:block;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mini small{display:block;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:120px;background:#333;color:#fff;padding:10px 16px;border-radius:10px;z-index:40;font-size:14px;max-width:90%;text-align:center}
+.install{background:var(--container);color:var(--on-container);padding:10px 14px;border-radius:12px;font-size:14px;margin-bottom:12px;display:flex;gap:10px;align-items:center}
+.install button{margin:0;width:auto;padding:8px 12px;font-size:14px}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script src="app.js"></script>
+</body>
+</html>

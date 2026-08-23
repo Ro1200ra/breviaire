@@ -1,0 +1,17 @@
+{
+  "name": "Bréviaire — Liturgie des Heures",
+  "short_name": "Bréviaire",
+  "description": "Les offices du jour (AELF) lus à voix haute, voix et vitesse réglables.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#FAF7F2",
+  "theme_color": "#5E1F2E",
+  "lang": "fr",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
