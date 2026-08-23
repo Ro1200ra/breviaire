@@ -98,12 +98,30 @@ h2.section{color:var(--primary);font-size:14px;text-transform:uppercase;letter-s
 .mini b{display:block;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .mini small{display:block;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:120px;background:#333;color:#fff;padding:10px 16px;border-radius:10px;z-index:40;font-size:14px;max-width:90%;text-align:center}
+.sec h3 .sing{margin-left:auto;background:var(--container);color:var(--on-container);border:none;border-radius:16px;padding:5px 12px;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap}
+.sec.cur h3 .sing{margin-left:8px}
+.chant .verse{padding:8px 10px;border-radius:10px;margin:4px 0;line-height:1.9;font-size:17px}
+.chant .verse.cur{background:var(--highlight)}
+.chant .line{display:block}
+.chant .syl{display:inline-flex;flex-direction:column;align-items:center;vertical-align:top;padding:0 1px;border-radius:4px}
+.chant .sep{display:inline-flex;flex-direction:column;vertical-align:top;color:var(--muted)}
+.chant .sep small,.chant .syl small:empty{min-height:10px}
+.chant .syl.cad{color:var(--primary);font-weight:600}
+.chant .syl.acc{color:var(--primary);font-weight:700;text-decoration:underline;text-underline-offset:3px}
+.chant .syl.int{color:#2E7D32;font-weight:600}
+.chant .syl.now{background:var(--gold);color:#000}
+.chant .syl small{display:block;font-size:9px;line-height:10px;min-height:10px;color:var(--muted);text-align:center;font-weight:400;text-decoration:none}
+.chant .role{font-size:11px;color:var(--muted);margin-right:6px;vertical-align:super}
+.chant .formula{font-size:13px;color:var(--muted);margin:4px 0 10px}
+.chant .ctrl{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0}
+.chant .ctrl .btn{width:auto;flex:1;margin:0;padding:10px 12px;font-size:15px}
 .install{background:var(--container);color:var(--on-container);padding:10px 14px;border-radius:12px;font-size:14px;margin-bottom:12px;display:flex;gap:10px;align-items:center}
 .install button{margin:0;width:auto;padding:8px 12px;font-size:14px}
 </style>
 </head>
 <body>
 <div id="app"></div>
+<script src="chant.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

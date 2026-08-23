@@ -1,7 +1,7 @@
 /* Service worker : application utilisable hors connexion, textes AELF conservés. */
-const SHELL = 'breviaire-shell-v1';
+const SHELL = 'breviaire-shell-v2';
 const DATA = 'aelf-data';
-const SHELL_FILES = ['./', './index.html', './app.js', './manifest.webmanifest', './icon-192.png', './icon-512.png'];
+const SHELL_FILES = ['./', './index.html', './app.js', './chant.js', './manifest.webmanifest', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(SHELL).then(c => c.addAll(SHELL_FILES)).then(() => self.skipWaiting()));
