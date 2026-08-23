@@ -1,5 +1,5 @@
 /* Service worker : application utilisable hors connexion, textes AELF conservés. */
-const SHELL = 'breviaire-shell-v2';
+const SHELL = 'breviaire-shell-v3';
 const DATA = 'aelf-data';
 const SHELL_FILES = ['./', './index.html', './app.js', './chant.js', './manifest.webmanifest', './icon-192.png', './icon-512.png'];
 

@@ -482,6 +482,7 @@ window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); state.
 function route() {
   if (unsubHome) { unsubHome(); unsubHome = null; }
   if (unsubOffice) { unsubOffice(); unsubOffice = null; }
+  if (window.Chant) Chant.stop();
   window.scrollTo(0, 0);
   const h = location.hash.replace(/^#\/?/, '');
   const [view, a, b] = h.split('/');
@@ -620,8 +621,27 @@ async function renderOffice(api, dateWithQuery) {
       ${s.subtitle ? `<div class="st">${esc(s.subtitle)}</div>` : ''}
       <div class="body">${Text.displayHtml(s.html, prefs.showVerses)}</div>
     </div>`).join('');
-  main.querySelectorAll('.sec').forEach(el => el.onclick = () => Speech.play(currentOffice, +el.dataset.i));
-  main.querySelectorAll('[data-sing]').forEach(b => b.onclick = e => { e.stopPropagation(); openChantSheet(currentOffice.sections[+b.dataset.sing]); });
+  // ---- psalmodie directe (voix seule, sans réglages) : le bouton ♪ chante / arrête sur place
+  let singingIdx = -1;
+  const setSinging = i => {
+    singingIdx = i;
+    main.querySelectorAll('[data-sing]').forEach(b => b.textContent = +b.dataset.sing === i ? '◼ Arrêter' : '♪ Chanter');
+    const prog = app.querySelector('#prog');
+    if (i >= 0 && prog) prog.textContent = '♪ ' + currentOffice.sections[i].title;
+    else render();
+  };
+  const stopChant = () => { if (window.Chant) Chant.stop(); if (singingIdx >= 0) setSinging(-1); };
+  const toggleChant = i => {
+    if (!window.Chant) { toast('Module de chant indisponible'); return; }
+    if (singingIdx === i) { stopChant(); return; }
+    const verses = Chant.parseVerses(currentOffice.sections[i].html);
+    if (!verses.length) { toast('Texte non psalmodiable'); return; }
+    if (Speech.playing) Speech.pause();
+    Chant.sing(verses, { voice: Speech.pickVoice(), rate: prefs.rate, pitch: prefs.pitch, onEnd: () => setSinging(-1) });
+    setSinging(i);
+  };
+  main.querySelectorAll('.sec').forEach(el => el.onclick = () => { stopChant(); Speech.play(currentOffice, +el.dataset.i); });
+  main.querySelectorAll('[data-sing]').forEach(b => b.onclick = e => { e.stopPropagation(); toggleChant(+b.dataset.sing); });
 
   app.querySelector('#btnShare').onclick = async () => {
     const text = `${currentOffice.title} — ${fmtDate(date)}\n\n` + currentOffice.sections.map(s => s.title.toUpperCase() + (s.subtitle ? ` (${s.subtitle})` : '') + '\n' + Text.htmlToPlain(s.html)).join('\n\n') + '\n\nSource : AELF (aelf.org)';
@@ -630,6 +650,7 @@ async function renderOffice(api, dateWithQuery) {
   };
   const mine = () => Speech.office === currentOffice;
   app.querySelector('#btnPlay').onclick = () => {
+    stopChant();
     if (mine() && Speech.section >= 0 && !Speech.finished) Speech.toggle();
     else Speech.play(currentOffice, mine() && Speech.section >= 0 ? Speech.section : Math.max(0, highlighted()));
   };
@@ -643,6 +664,7 @@ async function renderOffice(api, dateWithQuery) {
     const prog = app.querySelector('#prog'), play = app.querySelector('#btnPlay');
     if (!prog) return;
     app.querySelector('#btnSpeed').innerHTML = `${I.tune} ${fmtRate(prefs.rate)}`;
+    if (singingIdx >= 0) { play.innerHTML = I.play; prog.textContent = '♪ ' + currentOffice.sections[singingIdx].title; return; }
     if (!mine()) { play.innerHTML = I.play; prog.textContent = 'Prêt à lire'; return; }
     play.innerHTML = Speech.playing ? I.pause : I.play;
     const n = currentOffice.sections.length;
@@ -711,91 +733,6 @@ const pitchText = p => p < 0.85 ? 'grave' : p > 1.15 ? 'aiguë' : 'normale';
 
 // ---- Psalmodie grégorienne
 const isSingable = s => /^(hymne|ps\d|invit|zacharie|magnificat|symeon|tedeum|mariale)/.test(s.id) || /^(Psaume|Cantique|Hymne|Invitatoire|Te Deum)/i.test(s.title);
-
-function openChantSheet(section) {
-  if (!window.Chant) { toast('Module de chant indisponible'); return; }
-  if (Speech.playing) Speech.pause();
-  const verses = Chant.parseVerses(section.html);
-  if (!verses.length) { toast('Texte non psalmodiable'); return; }
-  const cp = { tone: prefs.chantTone || '8', transpose: prefs.chantTranspose ?? -4, tempo: prefs.chantTempo || 160, intonationEach: prefs.chantIntonationEach ?? false, notes: prefs.chantNotes ?? true, acc: prefs.chantAcc ?? 1, speak: prefs.chantSpeak ?? false };
-  const save = () => { prefs.chantTone = cp.tone; prefs.chantTranspose = cp.transpose; prefs.chantTempo = cp.tempo; prefs.chantIntonationEach = cp.intonationEach; prefs.chantNotes = cp.notes; prefs.chantAcc = cp.acc; prefs.chantSpeak = cp.speak; };
-  const bg = document.createElement('div'); bg.className = 'sheet-bg';
-  const trText = v => v === 0 ? 'hauteur d\'origine' : (v > 0 ? '+' : '') + v + ' demi-ton' + (Math.abs(v) > 1 ? 's' : '');
-  bg.innerHTML = `<div class="sheet chant">
-    <h2>♪ ${esc(section.title)}</h2>
-    <div class="help">Psalmodie sur les tons grégoriens : la mélodie est jouée à l'orgue, syllabe par syllabe, pour chanter dessus. Les syllabes de cadence sont en couleur, l'accent est souligné (accents du psautier AELF).</div>
-    <label class="l">Ton</label>
-    <select id="tone">${Chant.TONES.map(t => `<option value="${t.id}" ${t.id === cp.tone ? 'selected' : ''}>${t.name} — ${t.mode}</option>`).join('')}</select>
-    <div class="formula" id="formula"></div>
-    <label class="l">Qui chante ?</label>
-    <select id="acc">
-      <option value="0" ${cp.acc === 0 ? 'selected' : ''}>Voix chantée seule (a cappella)</option>
-      <option value="1" ${cp.acc === 1 ? 'selected' : ''}>Voix chantée + orgue (bourdon)</option>
-      <option value="2" ${cp.acc === 2 ? 'selected' : ''}>Orgue seul</option>
-    </select>
-    <div class="sw"><span>Dire aussi les paroles (voix du téléphone par-dessus la mélodie)</span><input type="checkbox" id="speakWords" ${cp.speak ? 'checked' : ''}></div>
-    <div class="ctrl">
-      <button class="btn secondary" id="playTone">${I.volume} Écouter le ton</button>
-      <button class="btn" id="sing">${I.play} Chanter</button>
-      <button class="btn secondary" id="stopChant">${I.stop} Arrêter</button>
-    </div>
-    <label class="l" id="lblTr">Hauteur : ${trText(cp.transpose)}</label>
-    <input type="range" id="tr" min="-12" max="8" step="1" value="${cp.transpose}">
-    <label class="l" id="lblTempo">Allure : ${cp.tempo} syllabes / min</label>
-    <input type="range" id="tempo" min="90" max="260" step="10" value="${cp.tempo}">
-    <div class="sw"><span>Intonation à chaque verset (sinon au premier seulement)</span><input type="checkbox" id="intEach" ${cp.intonationEach ? 'checked' : ''}></div>
-    <div class="sw"><span>Afficher le nom des notes sous les syllabes</span><input type="checkbox" id="showNotes" ${cp.notes ? 'checked' : ''}></div>
-    <div id="verses" style="margin-top:10px"></div>
-    <button class="btn secondary" id="close" style="margin-top:14px">Fermer</button>
-  </div>`;
-  document.body.appendChild(bg);
-  const q = sel => bg.querySelector(sel);
-  const ROLE = { flex: '†', med: '*', term: '' };
-  function renderVerses() {
-    const t = Chant.toneById(cp.tone);
-    q('#formula').textContent = `${t.name} — ${Chant.formula(t)}`;
-    q('#verses').innerHTML = verses.map((v, vi) => `<div class="verse" data-v="${vi}">` + v.lines.map((l, li) => {
-      const syls = Chant.pointLine(l.text, l.role, t, vi === 0 || cp.intonationEach);
-      let html = `<span class="line">`;
-      syls.forEach((s, si) => {
-        const cls = ['syl', s.kind === 'acc' ? 'acc' : s.kind === 'cad' ? 'cad' : s.kind === 'int' ? 'int' : ''].filter(Boolean).join(' ');
-        const sep = si > 0 ? (s.wordStart ? ' ' : `<span class="sep">-${cp.notes ? '<small></small>' : ''}</span>`) : '';
-        const note = cp.notes ? `<small>${s.kind !== 'ten' ? s.notes.map(Chant.noteName).join(' ') : ''}</small>` : '';
-        html += sep + `<span class="${cls}" data-v="${vi}" data-l="${li}" data-s="${si}">${esc(s.text)}${note}</span>`;
-      });
-      if (l.role === 'flex') html += ' <span class="role">†</span>';
-      return html + '</span>';
-    }).join('') + '</div>').join('');
-    bg.querySelectorAll('.verse').forEach(el => el.onclick = () => singFrom(+el.dataset.v));
-  }
-  let lastSyl = null;
-  const opts = () => ({ transpose: cp.transpose, tempo: cp.tempo, drone: cp.acc === 1, intonationEachVerse: cp.intonationEach,
-    timbre: cp.acc === 2 ? 'organ' : 'choir', speak: cp.speak, speakVoice: Speech.pickVoice(),
-    onVerse: vi => { bg.querySelectorAll('.verse').forEach(el => el.classList.toggle('cur', +el.dataset.v === vi)); const el = bg.querySelector(`.verse[data-v="${vi}"]`); if (el) el.scrollIntoView({ block: 'center', behavior: 'smooth' }); },
-    onSyllable: (vi, li, si) => { if (lastSyl) lastSyl.classList.remove('now'); lastSyl = bg.querySelector(`.syl[data-v="${vi}"][data-l="${li}"][data-s="${si}"]`); if (lastSyl) lastSyl.classList.add('now'); },
-    onEnd: () => { if (lastSyl) lastSyl.classList.remove('now'); bg.querySelectorAll('.verse').forEach(el => el.classList.remove('cur')); },
-  });
-  q('#tone').onchange = e => { cp.tone = e.target.value; save(); renderVerses(); if (Chant.isPlaying()) Chant.sing(verses, cp.tone, opts()); };
-  q('#acc').onchange = e => { cp.acc = +e.target.value; save(); if (Chant.isPlaying()) singFrom(Math.max(0, +(bg.querySelector('.verse.cur')?.dataset.v ?? 0))); };
-  q('#speakWords').onchange = e => { cp.speak = e.target.checked; save(); };
-  q('#tr').oninput = e => { cp.transpose = +e.target.value; q('#lblTr').textContent = 'Hauteur : ' + trText(cp.transpose); };
-  q('#tr').onchange = () => save();
-  q('#tempo').oninput = e => { cp.tempo = +e.target.value; q('#lblTempo').textContent = `Allure : ${cp.tempo} syllabes / min`; };
-  q('#tempo').onchange = () => save();
-  q('#intEach').onchange = e => { cp.intonationEach = e.target.checked; save(); renderVerses(); };
-  q('#showNotes').onchange = e => { cp.notes = e.target.checked; save(); renderVerses(); };
-  q('#playTone').onclick = () => Chant.playTone(cp.tone, opts());
-  q('#sing').onclick = () => Chant.sing(verses, cp.tone, opts());
-  q('#stopChant').onclick = () => { Chant.stop(); opts().onEnd(); };
-  function singFrom(vi) {
-    const o = opts();
-    Chant.sing(verses.slice(vi), cp.tone, Object.assign({}, o, { intonationEachVerse: cp.intonationEach || vi === 0, onVerse: i => o.onVerse(i + vi), onSyllable: (i, li, si) => o.onSyllable(i + vi, li, si) }));
-  }
-  renderVerses();
-  const close = () => { Chant.stop(); bg.remove(); };
-  q('#close').onclick = close;
-  bg.onclick = e => { if (e.target === bg) close(); };
-}
 
 // ---- Réglages
 function renderSettings() {
